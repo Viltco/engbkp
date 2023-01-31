@@ -4,6 +4,12 @@ from odoo import models, fields, api
 from odoo.exceptions import UserError
 
 
+class TempInh(models.Model):
+    _inherit = 'product.template'
+
+    show_on_hand_qty_status_button = fields.Float()
+
+
 class ResUserInh(models.Model):
     _inherit = 'res.users'
 
@@ -20,6 +26,68 @@ class StockMoveInh(models.Model):
     _inherit = 'stock.move'
 
     analytical_account_id = fields.Many2one('account.analytic.account', string="Operating Unit")
+
+
+class MrpWorkOrderInh(models.Model):
+    _inherit = 'mrp.workorder'
+
+    analytical_account_id = fields.Many2one('account.analytic.account', string="Operating Unit")
+
+
+class MultiPaymentInh(models.Model):
+    _inherit = 'multi.payments'
+
+    analytical_account_id = fields.Many2one('account.analytic.account', string="Operating Unit")
+    analytical_account_ids = fields.Many2many('account.analytic.account', compute='compute_account')
+
+    @api.depends('analytical_account_id')
+    def compute_account(self):
+        self.analytical_account_ids = self.env.user.analytical_account_ids.ids
+
+    def button_verified(self):
+        rec = super().button_verified()
+        for line in self.tree_link_id:
+            line.analytical_account_id = self.analytical_account_id.id
+        return rec
+
+class MultiPaymentTreeInh(models.Model):
+    _inherit = 'multi.payments.tree'
+
+    analytical_account_id = fields.Many2one('account.analytic.account', string="Operating Unit")
+
+
+class MrpProductionInh(models.Model):
+    _inherit = 'mrp.production'
+
+    analytical_account_id = fields.Many2one('account.analytic.account', string="Operating Unit")
+    analytical_account_ids = fields.Many2many('account.analytic.account', compute='compute_account')
+
+    @api.depends('analytical_account_id')
+    def compute_account(self):
+        self.analytical_account_ids = self.env.user.analytical_account_ids.ids
+
+    @api.onchange('bom_id')
+    def onchange_bom_unit(self):
+        self.analytical_account_id = self.bom_id.analytical_account_id
+
+    def action_confirm(self):
+        rec = super().action_confirm()
+        for line in self.move_raw_ids:
+            line.analytical_account_id = self.analytical_account_id.id
+        for order in self.workorder_ids:
+            order.analytical_account_id = self.analytical_account_id.id
+        return rec
+
+
+class MrpBomInh(models.Model):
+    _inherit = 'mrp.bom'
+
+    analytical_account_id = fields.Many2one('account.analytic.account', string="Operating Unit")
+    analytical_account_ids = fields.Many2many('account.analytic.account', compute='compute_account')
+
+    @api.depends('analytical_account_id')
+    def compute_account(self):
+        self.analytical_account_ids = self.env.user.analytical_account_ids.ids
 
 
 class AccountPaymentInh(models.Model):
@@ -120,6 +188,9 @@ class StockPickingInh(models.Model):
         for res in moves:
             for move in res.account_move_id.line_ids:
                 move.analytic_account_id = self.analytical_account_id.id
+        for line in self.move_line_ids_without_package:
+            line.analytical_account_id = self.analytical_account_id.id
+            line.move_id.analytical_account_id = self.analytical_account_id.id
         return rec
 
 
